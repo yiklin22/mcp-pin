@@ -65,7 +65,7 @@ def compare(lock: dict, tools) -> list[str]:
 
 
 def scan_text(text: str) -> list[str]:
-    hits = [name for name, rx in PATTERNS if rx.search(text)]
+    hits = list(dict.fromkeys(name for name, rx in PATTERNS if rx.search(text)))
     if any(unicodedata.category(ch) in INVISIBLE for ch in text):
         hits.append("invisible-chars")
     return hits
