@@ -25,9 +25,13 @@ PATTERNS = [
     ("hidden-tag", re.compile(r"<\s*/?\s*(important|system|instructions?|secret|admin)\b", re.I)),
     ("conceal-from-user", re.compile(r"\b(do\s*n[o']t|never|without)\s+(tell|telling|inform|informing|mention|mentioning|show|showing|notify|notifying)(ing)?\s+(the\s+)?user", re.I)),
     ("override", re.compile(r"\b(ignore|disregard|override)\s+(all\s+|any\s+)?(previous|prior|other|above)\s+(instructions|rules|tools?)", re.I)),
-    ("sensitive-path", re.compile(r"(~|\$HOME|/home/\w+|/Users/\w+)/\.(ssh|aws|cursor|config|gnupg)|id_rsa|\.env\b|mcp\.json|credentials", re.I)),
-    ("other-tool", re.compile(r"\b(before|when|instead of)\s+(using|calling)\s+(the\s+)?[`'\"]?\w+[`'\"]?\s+tool", re.I)),
-    ("must-call-first", re.compile(r"\b(must|always)\s+(first\s+)?(read|call|send|include|pass)\b", re.I)),
+    ("sensitive-path", re.compile(r"(~|\$HOME|/home/\w+|/Users/\w+)/\.(ssh|aws|cursor|config|gnupg)|id_rsa|\.env\b|mcp\.json|\.aws/credentials|credentials\.json", re.I)),
+    ("other-tool", re.compile(r"\b(before|when|instead of)\s+(using|calling)\s+(the\s+)?[`'\"]?\w+[`'\"]?\s+tool|"
+                              r"\bwhen(ever)?\s+(the\s+)?[`'\"]?\w+[`'\"]?\s+tool\s+is\s+(used|called|invoked)", re.I)),
+    ("conceal-from-user", re.compile(r"\b(never|don't|do\s+not)\s+(mention|tell|reveal|disclose|show)\b[^.]{0,40}\b(to\s+)?the\s+user", re.I)),
+    ("conversation-data", re.compile(r"\b(conversation|chat)\s+history|previous\s+messages|system\s+prompt|"
+                                     r"all\s+(prior|previous)\s+(messages|turns)", re.I)),
+    ("must-call-first", re.compile(r"\b(must|always)\s+(first\s+)?(read|send|include|pass)\b", re.I)),
     ("long-base64", re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")),
 ]
 INVISIBLE = {"Cf", "Co", "Cn"}  # format chars (zero-width, bidi), private use, unassigned

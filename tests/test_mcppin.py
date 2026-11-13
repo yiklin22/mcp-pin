@@ -75,3 +75,12 @@ def test_cli_end_to_end(tmp_path, monkeypatch, capsys):
     assert mcppin.main(["scan", "--", *server]) == 1
     out = capsys.readouterr().out
     assert "changed: add" in out and "add: hidden-tag" in out
+
+
+def test_poisoned_examples_are_flagged():
+    # Hand-written from published attack shapes; the patterns were adjusted
+    # against this set, so this is a regression check, not a measurement.
+    import json
+    from pathlib import Path
+    rows = [json.loads(line) for line in open(Path(__file__).with_name("poisoned.jsonl"))]
+    assert all(mcppin.scan_text(r["text"]) for r in rows), [r["shape"] for r in rows if not mcppin.scan_text(r["text"])]

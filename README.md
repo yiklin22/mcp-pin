@@ -37,19 +37,46 @@ scan looks for:
 
 ```bash
 uv venv && uv pip install "mcp>=2.3" pytest anyio
-python -m pytest -q        # 7 tests, including lock/check/scan over stdio
+python -m pytest -q        # 8 tests, including lock/check/scan over stdio
 ```
 
 The server runs with your environment, as an MCP client would start it.
 
 ## What is checked, and what is not
 
-- Tested: a clean and a poisoned fixture server, in-process and over stdio.
-  On the noticeday MCP server, scan flags nothing (3 tools), check passes,
-  and an edited lock entry fails with `changed: get_contract`.
-- Not yet measured: false positives on public servers. Running the official
-  reference servers via `npx` was not allowed in the session that built this.
-  That is the next step: scan a set of real servers and count flags by hand.
+**Tests (8):** a clean and a poisoned fixture server, in-process and over
+stdio; lock/check/scan through the CLI. On the noticeday MCP server, scan
+flags nothing (3 tools), check passes, and an edited lock entry fails with
+`changed: get_contract`.
+
+**False alarms on real servers.** Running third-party servers was not
+allowed in the session that built this, so `scripts/scan_sources.py` reads
+their source code as text and pulls out every tool and parameter description.
+
+| set | descriptions | flagged before tuning | flagged after |
+|---|---|---|---|
+| tuning: modelcontextprotocol/servers, github/github-mcp-server, microsoft/playwright-mcp | 955 | 5 | 0 |
+| held out: awslabs/mcp (231 files), supabase-community/supabase-mcp | 1,652 | - | 6 (0.36%) |
+
+The 5 tuning-set alarms were the word "credentials" in ordinary text and
+"always call this tool when the user asks"; those two patterns were
+narrowed. The held-out set was scanned once, after all changes. Its 6 alarms
+are all legitimate instructions to the model ("ALWAYS include...", "always
+pass iso_timestamp_start...", "Before using this tool, provide an
+explanation"). `must-call-first` causes 5 of them and is the next pattern to
+fix. The 0 on the tuning set is not an independent number.
+
+**Catching poisoned descriptions.** `tests/poisoned.jsonl` has 12
+descriptions I wrote from published attack shapes: hidden tags, shadowing
+another tool, override, concealment, invisible characters, base64, asking for
+the conversation history, cloud credentials, `.env`, fake system tags, MCP
+config theft. Before changes, scan flagged 9 of 12. It missed shadowing
+worded as "when the send_email tool is used", concealment worded as "never
+mention this step to the user", and a request for the conversation history.
+After adding three patterns it flags 12 of 12. That set is small, written by
+me, and was used for tuning, so it shows the shapes are covered, not how
+well scan does on attacks it has not seen.
+
 - The scan is a list of patterns, not a proof. A clean scan does not make a
   server safe, and a determined attacker can write around the patterns. The
   lock is the stronger control.
