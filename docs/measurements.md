@@ -36,6 +36,33 @@ The 2 alarms, both legitimate instructions to the model:
 
 Poisoned examples: `tests/poisoned.jsonl`, 12 of 12 flagged.
 
+### Unseen test set (run once, at the end of session 2)
+
+Chosen and written down before download; no pattern was changed in this
+session, and the set was scanned exactly once, after all other work.
+
+| repos (commit) | descriptions | flagged |
+|---|---|---|
+| getsentry/sentry-mcp (06b9eb7fcdc8), grafana/mcp-grafana (306d34a1b281), mongodb-js/mongodb-mcp-server (e607a7cec36a), hashicorp/terraform-mcp-server (3e38ca694399), cloudflare/mcp-server-cloudflare (a21972e21928) | 3,288 | 6 (0.18%) |
+
+Per repo: sentry-mcp 1,597, mcp-server-cloudflare 615, mongodb-mcp-server
+549, terraform-mcp-server 464, mcp-grafana 63.
+
+All 6 alarms are false alarms:
+
+- `other-tool` (2): mongodb-mcp-server `createCluster.ts` and
+  `upgradeCluster.ts`, ordinary advice containing "before calling this tool".
+- `conversation-data` (2): mongodb-mcp-server `eval-tests` type definitions
+  ("System prompt prepended for the agent under test", and a prompt for an
+  LLM judge). These are test-harness fields, not MCP tool descriptions.
+- `sensitive-path` (2): sentry-mcp `packages/cli/src/lib/env-registry.ts`,
+  help text for CLI environment variables that mentions credentials storage
+  and `.env` files. Also not MCP tool descriptions.
+
+The extractor takes every `description` string in the source, so the
+denominator includes some text that is not a tool or parameter description
+(as the last two bullets show). The rate is a rough figure, not exact.
+
 ## Session 1 (recorded in the README at commit e3de5c1)
 
 Tuning set 955 descriptions (5 alarms before tuning, 0 after). Held-out set

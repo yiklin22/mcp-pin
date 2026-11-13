@@ -124,13 +124,22 @@ nothing is run.
 |---|---|---|
 | tuning: modelcontextprotocol/servers, github/github-mcp-server, microsoft/playwright-mcp | 1,022 | 0 |
 | former held-out: awslabs/mcp, supabase-community/supabase-mcp | 4,147 | 2 (0.05%) |
+| **test, unseen:** getsentry/sentry-mcp, grafana/mcp-grafana, mongodb-js/mongodb-mcp-server, hashicorp/terraform-mcp-server, cloudflare/mcp-server-cloudflare | 3,288 | 6 (0.18%) |
 
-Neither number is independent. The patterns were tuned on the first set.
-The second set was held out in the first session (1,652 descriptions,
-6 alarms, 0.36%), but one pattern was narrowed after looking at those
-alarms, so it has been seen. This session re-ran the same repos at newer
-commits and with all of awslabs/mcp, not a subset. Both remaining alarms
-are legitimate instructions to the model ("Always include key...",
+Only the test row is an independent measurement. Its repos were chosen
+before download, no pattern changed in this session, and it was scanned
+once, at the end. All 6 alarms are false alarms: "before calling this tool"
+in ordinary advice (2), "system prompt" in eval-harness fields (2), and
+"credentials"/`.env` in CLI help text (2). The last four are not MCP tool
+descriptions at all; the extractor takes every `description` string, so the
+rate is a rough figure.
+
+The first two rows are not independent. The patterns were tuned on the
+first set. The second set was held out in the first session (1,652
+descriptions, 6 alarms, 0.36%), but one pattern was narrowed after looking
+at those alarms, so it has been seen. This session re-ran the same repos at
+newer commits and with all of awslabs/mcp, not a subset. Both remaining
+alarms are legitimate instructions to the model ("Always include key...",
 "Before using this tool, provide a 1-3 sentence explanation").
 
 **Poisoned descriptions.** `tests/poisoned.jsonl` has 12 descriptions
