@@ -4,6 +4,7 @@ on: [push, pull_request]
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -15,6 +16,7 @@ jobs:
   action:
     # Runs this repo's action.yml against the fixture server.
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: ./
@@ -39,3 +41,14 @@ jobs:
         run: |
           echo "check should have failed on the poisoned server"
           exit 1
+      - name: the failure is exit 1 with a "changed" finding, not a crash
+        env:
+          POISON: "1"
+        run: |
+          set +e
+          mcp-pin check --file "$RUNNER_TEMP/lock.json" --format json -- python tests/fixture_server.py > "$RUNNER_TEMP/out.json"
+          code=$?
+          set -e
+          cat "$RUNNER_TEMP/out.json"
+          test "$code" = 1
+          grep -q '"rule": "changed"' "$RUNNER_TEMP/out.json"

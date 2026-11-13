@@ -1,4 +1,7 @@
+import sys
+
 import anyio
+import pytest
 from mcp.server.mcpserver import MCPServer
 
 import mcppin
@@ -36,6 +39,64 @@ def test_check_catches_a_changed_description():
     [f] = mcppin.compare(lock, tools(clean_server(POISONED)))
     assert (f["tool"], f["rule"]) == ("add", "changed")
     assert f["match"].startswith("Adds two numbers.\n<IMPORTANT>") and "lock" in f["reason"]
+
+
+def test_check_says_when_only_the_schema_changed():
+    lock = mcppin.lock_data(tools(clean_server()))
+    lock["tools"]["add"]["sha256"] = "x"  # same description, different hash
+    [f] = mcppin.compare(lock, tools(clean_server()))
+    assert (f["tool"], f["rule"]) == ("add", "changed")
+    assert f["reason"] == mcppin.REASONS["changed-schema"]
+
+
+@pytest.mark.parametrize("content", [None, "{not json", "[]", "{}", '{"tools": []}', '{"tools": {"x": 1}}',
+                                     '{"tools": {"x": {"sha256": "a", "description": null}}}'])
+def test_check_with_a_bad_lock_file_fails_clearly(tmp_path, capsys, content):
+    lock = tmp_path / "lock.json"
+    if content is not None:
+        lock.write_text(content)
+    with pytest.raises(SystemExit) as e:
+        mcppin.main(["check", "--file", str(lock), "--", "unused"])  # exits before starting the server
+    assert e.value.code == 2
+    assert "run mcp-pin lock first" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("server", [["/nonexistent/server-binary"], [sys.executable, "-c", "raise SystemExit(3)"]])
+def test_a_server_that_does_not_start_exits_2(server, capsys):
+    assert mcppin.main(["scan", "--", *server]) == 2
+    err = capsys.readouterr().err
+    assert "error talking to server" in err and "Traceback" not in err
+
+
+def test_lock_to_an_unwritable_path_exits_2(tmp_path, capsys):
+    from pathlib import Path
+    server = [sys.executable, str(Path(__file__).with_name("fixture_server.py"))]
+    assert mcppin.main(["lock", "--file", str(tmp_path / "no" / "such" / "lock.json"), "--", *server]) == 2
+    assert "cannot write lock file" in capsys.readouterr().err
+
+
+def test_unexpected_errors_keep_their_traceback(monkeypatch, capsys):
+    async def broken(server):
+        raise TypeError("bug")
+    monkeypatch.setattr(mcppin, "list_tools", broken)
+    assert mcppin.main(["scan", "--", "unused"]) == 2
+    err = capsys.readouterr().err
+    assert "Traceback" in err and "TypeError: bug" in err
+
+
+def test_leaves_lists_every_exception_in_a_group():
+    class Group(Exception):  # stands in for ExceptionGroup, which needs Python 3.11
+        def __init__(self, *subs):
+            self.exceptions = subs
+    group = Group(OSError("a"), Group(ValueError("b")))
+    assert [str(x) for x in mcppin.leaves(group)] == ["a", "b"]
+
+
+def test_scan_sees_invisible_chars_in_parameter_descriptions():
+    from types import SimpleNamespace
+    tool = SimpleNamespace(name="t", description="Reads a file.",
+                           input_schema={"properties": {"path": {"description": "x\u200by"}}})
+    assert [(f["rule"], f["match"]) for f in mcppin.scan([tool])] == [("invisible-chars", "U+200B")]
 
 
 def test_check_catches_added_and_removed_tools():

@@ -16,10 +16,12 @@ import json
 import os
 import re
 import sys
+import traceback
 import unicodedata
 
 import anyio
 from mcp import Client, StdioServerParameters
+from mcp.shared.exceptions import MCPError
 
 PATTERNS = [
     ("hidden-tag", re.compile(r"<\s*/?\s*(important|system|instructions?|secret|admin)\b", re.I)),
@@ -48,7 +50,8 @@ REASONS = {
     "invisible-chars": "invisible Unicode characters can hide text from the user",
     "added": "tool is not in the lock file; review it, then run mcp-pin lock",
     "removed": "tool in the lock file is gone; review, then run mcp-pin lock",
-    "changed": "definition differs from the lock file; review it, then run mcp-pin lock",
+    "changed": "description differs from the lock file; review it, then run mcp-pin lock",
+    "changed-schema": "input schema or annotations differ from the lock file; review, then run mcp-pin lock",
 }
 
 
@@ -70,8 +73,8 @@ def lock_data(tools) -> dict:
                       for t in sorted(tools, key=lambda t: t.name)}}
 
 
-def finding(tool: str, rule: str, match: str) -> dict:
-    return {"tool": tool, "rule": rule, "match": match, "reason": REASONS[rule]}
+def finding(tool: str, rule: str, match: str, reason: str = "") -> dict:
+    return {"tool": tool, "rule": rule, "match": match, "reason": REASONS[reason or rule]}
 
 
 def compare(lock: dict, tools) -> list[dict]:
@@ -79,8 +82,9 @@ def compare(lock: dict, tools) -> list[dict]:
     old = lock["tools"]
     out = [finding(n, "added", now[n]["description"]) for n in sorted(now.keys() - old.keys())]
     out += [finding(n, "removed", old[n]["description"]) for n in sorted(old.keys() - now.keys())]
-    out += [finding(n, "changed", now[n]["description"]) for n in sorted(now.keys() & old.keys())
-            if now[n]["sha256"] != old[n]["sha256"]]
+    out += [finding(n, "changed", now[n]["description"],
+                    "changed" if now[n]["description"] != old[n]["description"] else "changed-schema")
+            for n in sorted(now.keys() & old.keys()) if now[n]["sha256"] != old[n]["sha256"]]
     return out
 
 
@@ -105,7 +109,7 @@ def scan(tools) -> list[dict]:
     out = []
     for t in tools:
         hits = {}
-        for text in [json.dumps(t.input_schema), t.description or ""]:
+        for text in [json.dumps(t.input_schema, ensure_ascii=False), t.description or ""]:
             hits.update(matches(text))  # the description's match wins
         out += [finding(t.name, rule, hits[rule]) for rule in sorted(hits)]
     return out
@@ -115,6 +119,14 @@ def show(f: dict) -> str:
     m = " ".join(f["match"].split())
     m = m if len(m) <= 70 else m[:69] + "…"
     return f'{f["tool"]}: {f["rule"]}: {json.dumps(m, ensure_ascii=False)} -- {f["reason"]}'
+
+
+def leaves(e: BaseException) -> list:
+    """The exceptions inside an exception group, or just e."""
+    subs = getattr(e, "exceptions", None)
+    if isinstance(subs, (list, tuple)) and subs:
+        return [leaf for sub in subs for leaf in leaves(sub)]
+    return [e]
 
 
 async def list_tools(server) -> list:
@@ -132,13 +144,35 @@ def main(argv=None) -> int:
         ap.error("give the server command after --")
     i = argv.index("--")
     a, cmd = ap.parse_args(argv[:i]), argv[i + 1:]
-    tools = anyio.run(list_tools, StdioServerParameters(command=cmd[0], args=cmd[1:], env=dict(os.environ)))
+    if a.action == "check":
+        try:
+            with open(a.file) as f:
+                lock = json.load(f)
+            if not (isinstance(lock, dict) and isinstance(lock.get("tools"), dict) and all(
+                    isinstance(e, dict) and isinstance(e.get("sha256"), str) and isinstance(e.get("description"), str)
+                    for e in lock["tools"].values())):
+                raise ValueError("not an mcp-pin lock file")
+        except (OSError, ValueError) as e:
+            ap.error(f"cannot read lock file {a.file} ({e}); run mcp-pin lock first")
+    try:
+        tools = anyio.run(list_tools, StdioServerParameters(command=cmd[0], args=cmd[1:], env=dict(os.environ)))
+    except Exception as e:  # exit 2, so a broken setup is never mistaken for findings (exit 1)
+        found = leaves(e)
+        if not all(isinstance(x, (OSError, MCPError)) for x in found):
+            traceback.print_exception(e)  # not a plain start/connection failure: may be a bug, show where
+        causes = "; ".join(f"{type(x).__name__}: {x}" for x in found)
+        print(f"mcp-pin: error talking to server {' '.join(cmd)}: {causes}", file=sys.stderr)
+        return 2
     if a.action == "lock":
-        with open(a.file, "w") as f:
-            json.dump(lock_data(tools), f, indent=2)
+        try:
+            with open(a.file, "w") as f:
+                json.dump(lock_data(tools), f, indent=2)
+        except OSError as e:
+            print(f"mcp-pin: cannot write lock file {a.file}: {e}", file=sys.stderr)
+            return 2
         problems = []
     else:
-        problems = compare(json.load(open(a.file)), tools) if a.action == "check" else scan(tools)
+        problems = compare(lock, tools) if a.action == "check" else scan(tools)
     if a.format == "json":
         print(json.dumps({"command": a.action, "tools": len(tools), "findings": problems}, indent=2))
     elif a.action == "lock":

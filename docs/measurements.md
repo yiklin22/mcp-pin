@@ -36,10 +36,24 @@ The 2 alarms, both legitimate instructions to the model:
 
 Poisoned examples: `tests/poisoned.jsonl`, 12 of 12 flagged.
 
+After the code review, `scan` was fixed to look for invisible characters in
+parameter descriptions too (`json.dumps(..., ensure_ascii=False)`). That only
+changes `scan()` on live servers; `scan_sources.py` and the poisoned set call
+`scan_text` on description strings, so the numbers above are unaffected. The
+two dev sets were re-run after the fix and gave the same counts.
+
 ### Unseen test set (run once, at the end of session 2)
 
-Chosen and written down before download; no pattern was changed in this
-session, and the set was scanned exactly once, after all other work.
+The repos were named in the session before download (in the message
+that announced the dev re-run, not in a separate file); no pattern was
+changed in this session, and the set was scanned exactly once, after all
+other work. A second attempt, to print the matched text for each alarm,
+was blocked before it ran; the matched text below was found by grepping the
+source files instead.
+
+getsentry/sentry-mcp now downloads as Sentry's "toolkit" repo (top folder
+`toolkit-HEAD`), which also contains the Sentry CLI. supabase-community/supabase-mcp
+downloads with top folder `mcp-HEAD`.
 
 | repos (commit) | descriptions | flagged |
 |---|---|---|
@@ -52,12 +66,14 @@ All 6 alarms are false alarms:
 
 - `other-tool` (2): mongodb-mcp-server `createCluster.ts` and
   `upgradeCluster.ts`, ordinary advice containing "before calling this tool".
-- `conversation-data` (2): mongodb-mcp-server `eval-tests` type definitions
-  ("System prompt prepended for the agent under test", and a prompt for an
-  LLM judge). These are test-harness fields, not MCP tool descriptions.
+- `conversation-data` (2): mongodb-mcp-server `eval-tests` type definitions:
+  "System prompt" (`evalTypes.ts:34`) and "conversation history" in a prompt
+  for an LLM judge (`datasetTypes.ts:90`). These are test-harness fields,
+  not MCP tool descriptions.
 - `sensitive-path` (2): sentry-mcp `packages/cli/src/lib/env-registry.ts`,
-  help text for CLI environment variables that mentions credentials storage
-  and `.env` files. Also not MCP tool descriptions.
+  help text for CLI environment variables: `.env` (line 99) and
+  `~/.config` in `~/.config/sentry/` (line 165). Also not MCP tool
+  descriptions.
 
 The extractor takes every `description` string in the source, so the
 denominator includes some text that is not a tool or parameter description
