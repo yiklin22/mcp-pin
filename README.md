@@ -63,8 +63,12 @@ The 5 tuning-set alarms were the word "credentials" in ordinary text and
 narrowed. The held-out set was scanned once, after all changes. Its 6 alarms
 are all legitimate instructions to the model ("ALWAYS include...", "always
 pass iso_timestamp_start...", "Before using this tool, provide an
-explanation"). `must-call-first` causes 5 of them and is the next pattern to
-fix. The 0 on the tuning set is not an independent number.
+explanation"). `must-call-first` caused 5 of them. It was then narrowed to fire only
+when the "must/always read/send/include/pass" is followed by a file, key,
+token, history, credentials, password, config or secret: the formerly
+held-out set drops to 2 alarms (0.12%), but it has now been looked at, so
+that figure is not independent either. The 0 on the tuning set is not an
+independent number. The 12 poisoned examples are all still flagged.
 
 **Catching poisoned descriptions.** `tests/poisoned.jsonl` has 12
 descriptions I wrote from published attack shapes: hidden tags, shadowing

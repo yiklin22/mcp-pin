@@ -31,7 +31,8 @@ PATTERNS = [
     ("conceal-from-user", re.compile(r"\b(never|don't|do\s+not)\s+(mention|tell|reveal|disclose|show)\b[^.]{0,40}\b(to\s+)?the\s+user", re.I)),
     ("conversation-data", re.compile(r"\b(conversation|chat)\s+history|previous\s+messages|system\s+prompt|"
                                      r"all\s+(prior|previous)\s+(messages|turns)", re.I)),
-    ("must-call-first", re.compile(r"\b(must|always)\s+(first\s+)?(read|send|include|pass)\b", re.I)),
+    ("must-call-first", re.compile(r"\b(must|always)\s+(first\s+)?(read|send|include|pass)\b[^.]{0,60}?"
+                                   r"\b(file|contents?|keys?|tokens?|history|credentials?|passwords?|config|secrets?|\.env)\b", re.I)),
     ("long-base64", re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")),
 ]
 INVISIBLE = {"Cf", "Co", "Cn"}  # format chars (zero-width, bidi), private use, unassigned
