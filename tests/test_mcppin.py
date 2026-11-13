@@ -84,3 +84,23 @@ def test_poisoned_examples_are_flagged():
     from pathlib import Path
     rows = [json.loads(line) for line in open(Path(__file__).with_name("poisoned.jsonl"))]
     assert all(mcppin.scan_text(r["text"]) for r in rows), [r["shape"] for r in rows if not mcppin.scan_text(r["text"])]
+
+
+def test_installed_command(tmp_path):
+    # The `mcp-pin` console script from pyproject.toml; skipped when not installed.
+    import os, shutil, subprocess, sys
+    from pathlib import Path
+    import pytest
+    exe = shutil.which("mcp-pin")
+    if not exe:
+        pytest.skip("mcp-pin is not installed")
+    server = [sys.executable, str(Path(__file__).with_name("fixture_server.py"))]
+
+    def run(action, **env):
+        return subprocess.run([exe, action, "--", *server], cwd=tmp_path, capture_output=True, text=True,
+                              env={**os.environ, **env})
+
+    assert run("lock").returncode == 0
+    assert run("check").returncode == 0
+    r = run("check", POISON="1")
+    assert r.returncode == 1 and "add" in r.stdout

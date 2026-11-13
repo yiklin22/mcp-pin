@@ -1,0 +1,44 @@
+name: mcp-pin
+description: Fail the build when an MCP server's tool definitions change (check) or look like a prompt injection (scan).
+author: Yi-Ko Lin
+branding:
+  icon: lock
+  color: gray-dark
+
+inputs:
+  command:
+    description: "check (compare against the lock file) or scan (look for injection shapes)"
+    default: check
+  server:
+    description: >
+      The command that starts the MCP server over stdio, e.g. "python server.py" or
+      "npx -y @scope/server". Split on whitespace; no shell quoting.
+    required: true
+  lock-file:
+    description: Lock file written by `mcp-pin lock` (used by check)
+    default: mcp-lock.json
+  python-version:
+    description: Python used to run mcp-pin. Set to "" to use the Python already on PATH.
+    default: "3.12"
+
+runs:
+  using: composite
+  steps:
+    - if: inputs.python-version != ''
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install mcp-pin
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: python -m pip install --quiet "$ACTION_PATH"
+    - name: mcp-pin ${{ inputs.command }}
+      shell: bash
+      env:
+        COMMAND: ${{ inputs.command }}
+        SERVER: ${{ inputs.server }}
+        LOCK_FILE: ${{ inputs.lock-file }}
+      run: |
+        set -f  # split SERVER on whitespace, but never glob it
+        mcp-pin "$COMMAND" --file "$LOCK_FILE" -- $SERVER

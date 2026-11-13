@@ -1,8 +1,8 @@
 """mcp-pin: pin an MCP server's tool definitions and scan them for hidden instructions.
 
-  mcppin lock  [--file mcp-lock.json] -- <server command...>   record each tool's definition hash
-  mcppin check [--file mcp-lock.json] -- <server command...>   fail if any tool was added, removed or changed
-  mcppin scan                         -- <server command...>   fail if a description looks like a prompt injection
+  mcp-pin lock  [--file mcp-lock.json] -- <server command...>   record each tool's definition hash
+  mcp-pin check [--file mcp-lock.json] -- <server command...>   fail if any tool was added, removed or changed
+  mcp-pin scan                         -- <server command...>   fail if a description looks like a prompt injection
 
 An MCP tool's description goes straight into the model's context. A server can
 hide instructions there ("tool poisoning") or change a description after you
@@ -88,7 +88,7 @@ async def list_tools(server) -> list:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="mcppin", description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(prog="mcp-pin", description=__doc__.split("\n")[0])
     ap.add_argument("action", choices=["lock", "check", "scan"])
     ap.add_argument("--file", default="mcp-lock.json")
     argv = sys.argv[1:] if argv is None else list(argv)
