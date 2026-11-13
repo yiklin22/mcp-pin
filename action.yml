@@ -17,6 +17,9 @@ inputs:
   lock-file:
     description: Lock file written by `mcp-pin lock` (used by check)
     default: mcp-lock.json
+  format:
+    description: "text or json"
+    default: text
   python-version:
     description: Python used to run mcp-pin. Set to "" to use the Python already on PATH.
     default: "3.12"
@@ -39,6 +42,7 @@ runs:
         COMMAND: ${{ inputs.command }}
         SERVER: ${{ inputs.server }}
         LOCK_FILE: ${{ inputs.lock-file }}
+        FORMAT: ${{ inputs.format }}
       run: |
         set -f  # split SERVER on whitespace, but never glob it
-        mcp-pin "$COMMAND" --file "$LOCK_FILE" -- $SERVER
+        mcp-pin "$COMMAND" --file "$LOCK_FILE" --format "$FORMAT" -- $SERVER

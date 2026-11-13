@@ -36,6 +36,20 @@ PATTERNS = [
     ("long-base64", re.compile(r"[A-Za-z0-9+/]{80,}={0,2}")),
 ]
 INVISIBLE = {"Cf", "Co", "Cn"}  # format chars (zero-width, bidi), private use, unassigned
+REASONS = {
+    "hidden-tag": "a tag like <IMPORTANT> marks text as orders for the model; users rarely read it",
+    "conceal-from-user": "asks the model to keep something from the user",
+    "override": "tries to cancel the model's other instructions",
+    "sensitive-path": "names a file that holds keys, credentials or MCP config",
+    "other-tool": "gives orders about when or how a tool is called; can shadow another tool",
+    "conversation-data": "asks for the conversation, earlier messages or the system prompt",
+    "must-call-first": "demands that a file or secret be read or sent along",
+    "long-base64": "a long encoded string can hide instructions or data",
+    "invisible-chars": "invisible Unicode characters can hide text from the user",
+    "added": "tool is not in the lock file; review it, then run mcp-pin lock",
+    "removed": "tool in the lock file is gone; review, then run mcp-pin lock",
+    "changed": "definition differs from the lock file; review it, then run mcp-pin lock",
+}
 
 
 def definition(tool) -> dict:
@@ -56,30 +70,51 @@ def lock_data(tools) -> dict:
                       for t in sorted(tools, key=lambda t: t.name)}}
 
 
-def compare(lock: dict, tools) -> list[str]:
+def finding(tool: str, rule: str, match: str) -> dict:
+    return {"tool": tool, "rule": rule, "match": match, "reason": REASONS[rule]}
+
+
+def compare(lock: dict, tools) -> list[dict]:
     now = lock_data(tools)["tools"]
     old = lock["tools"]
-    out = [f"added: {n}" for n in sorted(now.keys() - old.keys())]
-    out += [f"removed: {n}" for n in sorted(old.keys() - now.keys())]
-    out += [f"changed: {n}" for n in sorted(now.keys() & old.keys()) if now[n]["sha256"] != old[n]["sha256"]]
+    out = [finding(n, "added", now[n]["description"]) for n in sorted(now.keys() - old.keys())]
+    out += [finding(n, "removed", old[n]["description"]) for n in sorted(old.keys() - now.keys())]
+    out += [finding(n, "changed", now[n]["description"]) for n in sorted(now.keys() & old.keys())
+            if now[n]["sha256"] != old[n]["sha256"]]
     return out
 
 
-def scan_text(text: str) -> list[str]:
-    hits = list(dict.fromkeys(name for name, rx in PATTERNS if rx.search(text)))
-    if any(unicodedata.category(ch) in INVISIBLE for ch in text):
-        hits.append("invisible-chars")
+def matches(text: str) -> dict[str, str]:
+    """Rule name -> the first text it matched."""
+    hits = {}
+    for name, rx in PATTERNS:
+        m = rx.search(text)
+        if m and name not in hits:
+            hits[name] = m.group(0)
+    invisible = sorted({f"U+{ord(ch):04X}" for ch in text if unicodedata.category(ch) in INVISIBLE})
+    if invisible:
+        hits["invisible-chars"] = " ".join(invisible)
     return hits
 
 
-def scan(tools) -> list[str]:
+def scan_text(text: str) -> list[str]:
+    return list(matches(text))
+
+
+def scan(tools) -> list[dict]:
     out = []
     for t in tools:
-        texts = [t.description or ""] + [json.dumps(t.input_schema)]
-        hits = sorted({h for s in texts for h in scan_text(s)})
-        if hits:
-            out.append(f"{t.name}: {', '.join(hits)}")
+        hits = {}
+        for text in [json.dumps(t.input_schema), t.description or ""]:
+            hits.update(matches(text))  # the description's match wins
+        out += [finding(t.name, rule, hits[rule]) for rule in sorted(hits)]
     return out
+
+
+def show(f: dict) -> str:
+    m = " ".join(f["match"].split())
+    m = m if len(m) <= 70 else m[:69] + "…"
+    return f'{f["tool"]}: {f["rule"]}: {json.dumps(m, ensure_ascii=False)} -- {f["reason"]}'
 
 
 async def list_tools(server) -> list:
@@ -91,6 +126,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="mcp-pin", description=__doc__.split("\n")[0])
     ap.add_argument("action", choices=["lock", "check", "scan"])
     ap.add_argument("--file", default="mcp-lock.json")
+    ap.add_argument("--format", choices=["text", "json"], default="text")
     argv = sys.argv[1:] if argv is None else list(argv)
     if "--" not in argv or argv.index("--") == len(argv) - 1:
         ap.error("give the server command after --")
@@ -100,12 +136,17 @@ def main(argv=None) -> int:
     if a.action == "lock":
         with open(a.file, "w") as f:
             json.dump(lock_data(tools), f, indent=2)
+        problems = []
+    else:
+        problems = compare(json.load(open(a.file)), tools) if a.action == "check" else scan(tools)
+    if a.format == "json":
+        print(json.dumps({"command": a.action, "tools": len(tools), "findings": problems}, indent=2))
+    elif a.action == "lock":
         print(f"locked {len(tools)} tools in {a.file}")
-        return 0
-    problems = compare(json.load(open(a.file)), tools) if a.action == "check" else scan(tools)
-    for p in problems:
-        print(p)
-    print(f"{len(tools)} tools, {len(problems)} {'changes' if a.action == 'check' else 'flagged'}")
+    else:
+        for p in problems:
+            print(show(p))
+        print(f"{len(tools)} tools, {len(problems)} {'changes' if a.action == 'check' else 'findings'}")
     return 1 if problems else 0
 
 
